@@ -1,0 +1,22 @@
+{
+  "name": "trails-logos-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "trails.logos v0.1.0 — On-chain trail registry and distributed asset storage",
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "typecheck": "pnpm -r --parallel run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "pnpm -r run build",
+    "dev": "pnpm --filter @trails-logos/server run dev",
+    "demo": "tsx scripts/demo.ts",
+    "trails-logos": "pnpm --filter @trails-logos/cli run cli"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.7"
+  }
+}

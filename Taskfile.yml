@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: '3'
+
+vars:
+  PROJECT_NAME: trails-logos
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  install:
+    desc: Install workspace dependencies
+    cmds:
+      - pnpm install
+
+  typecheck:
+    desc: Run strict TypeScript checks across all workspace packages
+    cmds:
+      - pnpm typecheck
+
+  test:
+    desc: Run all tests (TypeScript workspace + Rust LEZ contract)
+    cmds:
+      - pnpm test
+      - cd lez && cargo test
+
+  test:ts:
+    desc: Run unit and integration test suite with Vitest
+    cmds:
+      - pnpm test
+
+  test:contract:
+    desc: Run Rust LEZ smart contract tests
+    cmds:
+      - cd lez && cargo test
+
+  build:
+    desc: Compile all workspace packages
+    cmds:
+      - pnpm build
+
+  demo:
+    desc: Run the official trails.logos v0.1.0 reproducible acceptance demonstration
+    cmds:
+      - pnpm demo
+
+  dev:
+    desc: Run the trails.logos REST API server in development mode
+    cmds:
+      - pnpm dev -- {{.CLI_ARGS}}
+
+  cli:
+    desc: Run trails-logos CLI with arguments (e.g. task cli -- --help)
+    cmds:
+      - pnpm trails-logos {{.CLI_ARGS}}

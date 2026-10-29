@@ -1,0 +1,24 @@
+{
+  "name": "@trails-logos/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "trails-logos": "./dist/bin/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "cli": "tsx src/bin/cli.ts"
+  },
+  "dependencies": {
+    "@trails-logos/core": "workspace:*",
+    "@trails-logos/registry": "workspace:*",
+    "@trails-logos/storage": "workspace:*",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "typescript": "^5.8.2"
+  }
+}

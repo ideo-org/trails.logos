@@ -1,0 +1,9 @@
+packages:
+  - 'core'
+  - 'storage'
+  - 'registry'
+  - 'server'
+  - 'cli'
+
+allowBuilds:
+  esbuild: true

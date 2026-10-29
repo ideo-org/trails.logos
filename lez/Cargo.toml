@@ -1,0 +1,17 @@
+[package]
+name = "lez-trails-registry"
+version = "0.1.0"
+edition = "2021"
+description = "Logos Execution Zone (LEZ) Trail Registry Smart Contract"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+borsh = { version = "1.5", features = ["derive"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"

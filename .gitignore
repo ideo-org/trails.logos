@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+target/
+.tsbuildinfo
+
+# Local state & keys
+.local/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.db
+
+# Temp files & logs
+tmp/
+temp/
+*.log
+
+# OS metadata
+Thumbs.db
+.DS_Store
+
+# Coverage
+coverage/
