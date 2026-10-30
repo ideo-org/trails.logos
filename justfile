@@ -16,30 +16,14 @@ test:
     pnpm test
     cd lez; cargo test
 
-# Run Rust contract tests
-test-contract:
-    cd lez; cargo test
-
-# Build all workspace packages
-build:
-    pnpm build
-
-# Run the reproducible acceptance demonstration
-demo:
-    pnpm demo
-
-# Free port 8095
-kill-dev:
-    bunx kill-port 8095
-
 # Clean up port 8095 and start server with tsx
 dev *ARGS:
     bunx kill-port 8095
     pnpm dev -- {{ARGS}}
 
-# Alias for dev
-restart-dev *ARGS:
-    just dev {{ARGS}}
+# Run the reproducible acceptance demonstration
+demo:
+    pnpm demo
 
 # Run the trails-logos CLI
 cli *ARGS:

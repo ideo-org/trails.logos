@@ -26,43 +26,16 @@ tasks:
       - pnpm test
       - cd lez && cargo test
 
-  test:ts:
-    desc: Run unit and integration test suite with Vitest
-    cmds:
-      - pnpm test
-
-  test:contract:
-    desc: Run Rust LEZ smart contract tests
-    cmds:
-      - cd lez && cargo test
-
-  build:
-    desc: Compile all workspace packages
-    cmds:
-      - pnpm build
-
-  demo:
-    desc: Run the official trails.logos v0.1.0 reproducible acceptance demonstration
-    cmds:
-      - pnpm demo
-
-  kill-dev:
-    desc: Free port 8095 using bunx kill-port
-    cmds:
-      - bunx kill-port 8095
-
-  restart-dev:
-    desc: Alias for task dev (cleans port 8095 and runs API server)
-    cmds:
-      - task: dev
-        vars:
-          CLI_ARGS: '{{.CLI_ARGS}}'
-
   dev:
     desc: Automatically clean up port 8095 and run the API server directly with tsx
     cmds:
       - bunx kill-port 8095
       - pnpm dev -- {{.CLI_ARGS}}
+
+  demo:
+    desc: Run the official trails.logos v0.1.0 reproducible acceptance demonstration
+    cmds:
+      - pnpm demo
 
   cli:
     desc: Run trails-logos CLI with arguments (e.g. task cli -- --help)
