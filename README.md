@@ -42,6 +42,60 @@ flowchart TD
 
 ---
 
+## What We Built With Logos: The Decentralized Stack
+
+Spatial trails capture irreplaceable physical moments: LiDAR point clouds of architectural ruins, ambient binaural field recordings, and precise AR camera anchors. Centralized platforms (AWS, Google Cloud, Firebase) introduce single points of failure, censorship risks, platform lock-in, and inevitable bit rot when servers are decommissioned.
+
+`trails.logos` replaces centralized infrastructure with the **Logos Decentralized Technology Stack**:
+
+```mermaid
+graph LR
+    subgraph Capture ["Spatial Capture"]
+        Sensors["LiDAR + GPS + Audio"] --> Zip[".trail Bundle (ZIP)"]
+    end
+
+    subgraph LogosStack ["Logos Decentralized Stack"]
+        direction TB
+        subgraph StorageLayer ["Logos Storage / Codex"]
+            Chunk["Content-Addressed Chunks"]
+            CID["Deterministic SHA-256 Multihash"]
+            Chunk --- CID
+        end
+        subgraph ConsensusLayer ["Logos Execution Zone (LEZ)"]
+            Contract["Rust Guest Contract (Borsh)"]
+            State["Canonical Publication & Revision Registry"]
+            Contract --- State
+        end
+    end
+
+    subgraph Consumption ["Offline Explorer"]
+        Verify["Verify CID SHA-256"] --> Replay["100% Offline AR/Audio Walk"]
+    end
+
+    Zip -->|Upload & Pin| StorageLayer
+    StorageLayer -->|Emit CID| ConsensusLayer
+    ConsensusLayer -->|Discover| Consumption
+    StorageLayer -->|Stream Archive| Consumption
+```
+
+### 1. Logos Storage (Codex Integration)
+- **Content Addressing**: Trails are addressed by their outer archive SHA-256 multihash (`cid_sha256_<digest>`). It is impossible to alter a single audio sample or coordinate frame without changing the CID.
+- **Durable P2P Chunking**: Big binary payloads (LiDAR point clouds, 4K textures, spatial audio) are split into content-addressed erasure-coded chunks distributed across Codex storage nodes.
+- **Immutable References**: Inner assets have internal SHA-256 checksums recorded in `manifest.json`. The outer bundle has an external CID, preventing recursive circular hash issues.
+
+### 2. Logos Execution Zone (LEZ Contract)
+- **Rust Guest Program (`lez/src/lib.rs`)**: Runs deterministically within the Logos Execution Zone state machine using Borsh binary serialization.
+- **Canonical Ownership & Identity**: Ties each `trail_id` to the publisher's cryptographic account address (`publisher_account`).
+- **Monotonic Revision History**: Enforces linear versioning. Revision `N+1` cannot be published unless signed by the authorized account, preventing unauthorized modification.
+- **Discoverability Flag**: Allows authors to toggle `listed: true/false` directly on-chain without deleting historical archive data.
+
+### 3. Dual Runtime Architecture
+`trails.logos` abstracts both storage and registry behind clean interfaces (`IStorageAdapter`, `IRegistryAdapter`):
+- **Production Mode**: Interacts with live Logos Codex daemons and LEZ RPC nodes.
+- **Sandbox / Test Mode**: Employs deterministic in-memory/disk mock engines (`MockStorageAdapter`, `MockRegistryAdapter`). This allows rapid offline developer workflows, instant unit tests, and seamless iOS simulator testing without waiting for live block finalization.
+
+---
+
 ## Core Design Principles
 
 1. **Deterministic Verification Before Publication**:
@@ -357,11 +411,14 @@ The on-chain component is implemented in Rust (`lez/src/lib.rs`) compiled to an 
 
 ---
 
-## REST API Server Specification
+## REST API Server Specification & Gateway Architecture
 
-The server runs by default on port `8095` (or configured via `PORT` environment variable).
+### Why an Edge Gateway?
+Mobile operating systems (iOS and Android) impose strict execution limits: background network sockets are terminated after a few seconds, battery budgets prohibit continuous P2P gossip listening, and running a full libp2p or Rust consensus daemon directly on-device severely inflates binary size and thermal footprint.
 
-### Endpoints
+`@trails-logos/server` (running on port `8095` locally or at `http://vm.ideomind.org:8095`) serves as an **Edge Gateway Node**. It exposes clean, lightweight HTTP REST endpoints to native mobile clients while directly interfacing with Logos Storage (Codex) chunk distribution and Logos Execution Zone (LEZ) state machines.
+
+### Endpoints Overview
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -375,6 +432,93 @@ The server runs by default on port `8095` (or configured via `PORT` environment 
 | `GET` | `/trails/:id` | Get canonical on-chain publication record for a trail ID. |
 | `GET` | `/trails/:id/revisions` | List full revision history for a trail. |
 | `GET` | `/trails/:id/download` | Stream the raw ZIP package archive by active revision or `?revision=N`. |
+
+---
+
+### Key Endpoint Payloads
+
+#### 1. Publish a Trail (`POST /publications`)
+Accepts a binary stream or multipart upload of the `.trail` ZIP bundle. The gateway unpacks the archive, validates the manifest and all media hashes against the canonical schema, computes the outer SHA-256 multihash CID, pushes chunks to Logos Storage / Codex, and broadcasts the publication transaction to LEZ:
+
+```json
+// Response: 201 Created
+{
+  "receipt": {
+    "operationId": "op_9f82c471",
+    "trailId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "revision": 1,
+    "packageCid": "cid_sha256_e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "packageSizeBytes": 1342177,
+    "publisherAccount": "0x0000000000000000000000000000000000000001",
+    "blockNumber": 1042,
+    "transactionRef": "0x7a9bc2...",
+    "verifiedAt": "2026-10-30T08:15:00.000Z",
+    "status": "committed"
+  }
+}
+```
+
+#### 2. Query Discovery (`GET /discovery`)
+Returns published trails aggregated from on-chain LEZ registry listings and storage metadata. Supports filtering by text search (`query`), geographic region (`area`), or specific creator (`creatorId`):
+
+```json
+// GET /discovery?area=San+Francisco&limit=10
+{
+  "trails": [
+    {
+      "trailId": "test-presidio-coastal-trail",
+      "title": "Presidio Coastal Overlook (Sample)",
+      "shortDescription": "Pacific ocean bluffs and eucalyptus groves above the Golden Gate.",
+      "creator": {
+        "id": "creator-test-mira",
+        "username": "test-mira",
+        "displayName": "Mira Patel (Test)"
+      },
+      "packageCid": "cid_sha256_d41d8cd98f00b204e9800998ecf8427e",
+      "packageSizeBytes": 451200,
+      "capabilities": {
+        "hasPhotos": true,
+        "hasVoice": true,
+        "hasLocalSpatialPath": true
+      },
+      "currentRevision": 1,
+      "updatedAtBlock": 1024
+    }
+  ],
+  "nextCursor": null
+}
+```
+
+#### 3. Creator Registry & User Onboarding (`GET /creators`)
+Enables decentralized multi-user identity: users establish a unique username handle (e.g., `@test-mira`), display name, avatar, and bio bound to their cryptographic account address:
+
+```json
+// GET /creators
+{
+  "creators": [
+    {
+      "id": "creator-test-mira",
+      "username": "test-mira",
+      "displayName": "Mira Patel (Test)",
+      "bio": "Spatial sound designer & architectural preservationist.",
+      "accountAddress": "0x0000000000000000000000000000000000000001",
+      "publishedTrailCount": 1
+    }
+  ]
+}
+```
+
+#### 4. Content-Addressed Download (`GET /trails/:id/download`)
+Streams the complete, uncorrupted `.trail` ZIP archive directly from Logos Storage (Codex). The HTTP response includes `ETag: "<packageCid>"` and `Content-Disposition` headers:
+```http
+HTTP/1.1 200 OK
+Content-Type: application/zip
+ETag: "cid_sha256_e3b0c44..."
+Content-Length: 1342177
+
+<raw binary ZIP archive>
+```
+The iOS client compares the computed SHA-256 of the downloaded bytes against the `ETag` / `packageCid` before unpacking to disk. If a single byte differs, the download is rejected.
 
 ---
 
@@ -464,9 +608,79 @@ task cli -- download <trail-id> -o ./downloaded.zip
 
 The Trails iOS client communicates directly with this service via [`TrailsLogosClient.swift`](file:///N:/hack/trails/ios/Sources/Trails/Services/TrailsLogosClient.swift):
 
-- **Publication Flow**: When a user completes a trail in the iOS app, the app bundles LiDAR mesh, audio notes, and photos, and calls `POST /publications`.
-- **Discovery Flow**: The `Explore` and `Community` views query `GET /discovery` and `GET /creators` to fetch peer-created trails without third-party centralized dependencies.
-- **Offline Download**: Tapping "Download for Offline Walk" triggers `GET /trails/:id/download`, and stores the package in the local `TrailPackageStore`.
+### 1. Architectural Interaction
+- **Publication Flow**: When a user completes a walk recording, the iOS app bundles the LiDAR mesh, audio notes, camera keyframes, and `manifest.json` into a `.trail` ZIP package and calls `POST /publications`.
+- **Discovery & Community**: The `Explore` and `Community` views query `GET /discovery` and `GET /creators` to fetch peer-created trails without third-party centralized cloud dependencies.
+- **Creator Onboarding & Multi-User Identity**: During user onboarding, the client reserves a unique username handle (e.g. `@test-mira`) and sets their profile picture and bio, which binds to their cryptographic keypair in the registry.
+- **Offline Download & Tamper Verification**: Tapping "Download for Offline Walk" triggers `GET /trails/:id/download`. The app verifies the outer SHA-256 multihash against the on-chain package CID before unpacking to disk. Once saved, the user can walk the trail in airplane mode with 100% offline spatial audio & AR anchors.
+
+### 2. Apple App Transport Security (ATS) Configuration
+By default, Apple enforces App Transport Security (ATS), blocking cleartext `http://` traffic for `URLSession`. When connecting to local development gateways or remote staging servers (e.g. `http://vm.ideomind.org:8095`), your iOS app's `Info.plist` must explicitly configure an ATS exception:
+
+#### Option A: Domain-Specific Exception (Recommended for TestFlight & Staging)
+Add an exception under `NSAppTransportSecurity` specifying the server domain:
+
+```xml
+<key>NSAppTransportSecurity</key>
+<dict>
+    <key>NSExceptionDomains</key>
+    <dict>
+        <key>vm.ideomind.org</key>
+        <dict>
+            <!-- Allows HTTP cleartext loads for this domain -->
+            <key>NSExceptionAllowsInsecureHTTPLoads</key>
+            <true/>
+            <key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
+            <true/>
+            <!-- Includes subdomains if applicable -->
+            <key>NSIncludesSubdomains</key>
+            <true/>
+        </dict>
+    </dict>
+    <!-- Allows local network connections (e.g. Mac/PC local dev on Wi-Fi) -->
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+</dict>
+```
+
+#### Option B: Global Exception (For Debug Builds Only)
+```xml
+<key>NSAppTransportSecurity</key>
+<dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+</dict>
+```
+
+---
+
+## Live Demo & Verification Walkthrough
+
+To demo the complete system end-to-end:
+
+1. **Start the API Server**:
+   ```bash
+   task dev
+   ```
+   *(Automatically kills any stale processes on port 8095 and starts the live server with seed creators and trails).*
+
+2. **Verify Server Health**:
+   ```bash
+   curl http://localhost:8095/health
+   # => {"status":"ok","version":"0.1.0","timestamp":"..."}
+   ```
+
+3. **Verify Creator Registry**:
+   ```bash
+   curl http://localhost:8095/creators
+   # => Returns registered creators including @test-mira
+   ```
+
+4. **Run the Full Decentralized Pipeline Demo**:
+   ```bash
+   task demo
+   ```
+   *(Executes the automated multi-agent script: package creation -> manifest validation -> CID hashing -> Codex upload -> LEZ smart contract registration -> peer discovery query -> archive download & offline verification).*
 
 ---
 
