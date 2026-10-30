@@ -85,5 +85,50 @@ describe("Server REST API Suite (PRD Section 13)", () => {
     expect(dlRes.headers.get("content-type")).toBe("application/zip");
     const downloadedBuf = Buffer.from(await dlRes.arrayBuffer());
     expect(downloadedBuf.equals(zipBuffer)).toBe(true);
+
+    // 6. GET /discovery (PRD v0.4.0 §18)
+    const discRes = await fetch(`${baseUrl}/discovery`);
+    expect(discRes.status).toBe(200);
+    const discBody = await discRes.json();
+    expect(discBody.items.length).toBe(1);
+    const item = discBody.items[0];
+    expect(item.trailId).toBe(trailId);
+    expect(item.title).toBe("Mission Peak Ridge Sunrise Trail");
+    expect(item.creatorId).toBeDefined();
+    expect(item.username).toBeDefined();
+    expect(item.discoveryAnchor).toBeDefined();
+    expect(item.discoveryAnchor.latitude).toBeCloseTo(37.5123, 2);
+    expect(item.packageCid).toBe(cid);
+    expect(item.capabilities.hasPhotos).toBe(true);
+
+    // 7. GET /discovery/:id
+    const singleDiscRes = await fetch(`${baseUrl}/discovery/${trailId}`);
+    expect(singleDiscRes.status).toBe(200);
+    const singleDisc = await singleDiscRes.json();
+    expect(singleDisc.trailId).toBe(trailId);
+
+    // 8. Area query: within bbox matches, outside bbox does not match
+    const matchAreaRes = await fetch(`${baseUrl}/discovery?area=bbox:37.0,-122.5,38.0,-121.0`);
+    const matchAreaBody = await matchAreaRes.json();
+    expect(matchAreaBody.items.length).toBe(1);
+
+    const outsideAreaRes = await fetch(`${baseUrl}/discovery?area=bbox:40.0,-74.5,41.0,-73.0`);
+    const outsideAreaBody = await outsideAreaRes.json();
+    expect(outsideAreaBody.items.length).toBe(0);
+
+    // 9. Creator search & filtering (PRD v0.4.0 §7)
+    const creatorsRes = await fetch(`${baseUrl}/creators`);
+    expect(creatorsRes.status).toBe(200);
+    const creatorsBody = await creatorsRes.json();
+    expect(creatorsBody.items.length).toBe(1);
+    expect(creatorsBody.items[0].trailCount).toBe(1);
+
+    const creatorFilterRes = await fetch(`${baseUrl}/discovery?creatorId=${item.creatorId}`);
+    const creatorFilterBody = await creatorFilterRes.json();
+    expect(creatorFilterBody.items.length).toBe(1);
+
+    const nonExistentCreatorRes = await fetch(`${baseUrl}/discovery?creatorId=creator-does-not-exist`);
+    const nonExistentCreatorBody = await nonExistentCreatorRes.json();
+    expect(nonExistentCreatorBody.items.length).toBe(0);
   });
 });

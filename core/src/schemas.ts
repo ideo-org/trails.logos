@@ -157,7 +157,11 @@ export const TrailManifestSchema = z.object({
   revision: z.number().int().positive(),
   title: z.string().min(1),
   introduction: z.string().optional(),
+  creatorId: z.string().optional(),
+  creatorUsername: z.string().optional(),
   creatorDisplayName: z.string().optional(),
+  sourceTrailId: z.string().optional(),
+  inspiredByTrailId: z.string().optional(),
   recordedAt: z.string().datetime(),
   endedAt: z.string().datetime().optional(),
   place: PlaceSchema.optional(),
@@ -171,6 +175,47 @@ export const TrailManifestSchema = z.object({
 }).strict();
 
 export type TrailManifest = z.infer<typeof TrailManifestSchema>;
+
+// 8b. Discovery Anchor & Discovery Record (PRD v0.4.0 §6, §7, §18)
+export const DiscoveryAnchorSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  altitude: z.number().optional(),
+}).strict();
+
+export type DiscoveryAnchor = z.infer<typeof DiscoveryAnchorSchema>;
+
+export const DiscoveryRecordSchema = z.object({
+  trailId: z.string().min(1),
+  revision: z.number().int().positive(),
+  title: z.string().min(1),
+  shortDescription: z.string().optional(),
+  creatorId: z.string().min(1),
+  username: z.string().min(1),
+  displayName: z.string().min(1),
+  publisherReference: z.string().min(1),
+  recordedAt: z.string().datetime(),
+  publishedAt: z.string().datetime(),
+  placeLabel: z.string().optional(),
+  discoveryAnchor: DiscoveryAnchorSchema.optional(),
+  coverReference: z.string().optional(),
+  capabilities: CapabilitiesSchema,
+  packageCid: z.string().min(1),
+  packageSizeBytes: z.number().int().positive(),
+  listed: z.boolean(),
+}).strict();
+
+export type DiscoveryRecord = z.infer<typeof DiscoveryRecordSchema>;
+
+export const CreatorRecordSchema = z.object({
+  creatorId: z.string().min(1),
+  username: z.string().min(1),
+  displayName: z.string().min(1),
+  publisherReference: z.string().min(1),
+  trailCount: z.number().int().nonnegative(),
+}).strict();
+
+export type CreatorRecord = z.infer<typeof CreatorRecordSchema>;
 
 // 9. Trail Publication (LEZ State Record)
 export const TrailPublicationSchema = z.object({

@@ -128,6 +128,48 @@ export class TrailsServer {
         return;
       }
 
+      // GET /discovery (PRD v0.4.0 §18)
+      if (method === "GET" && pathname === "/discovery") {
+        const area = url.searchParams.get("area") || undefined;
+        const creatorId = url.searchParams.get("creatorId") || undefined;
+        const query = url.searchParams.get("query") || undefined;
+        const cursor = url.searchParams.get("cursor") || undefined;
+        const limitStr = url.searchParams.get("limit");
+        const limit = limitStr ? parseInt(limitStr, 10) : 50;
+        const includeUnlisted = url.searchParams.get("includeUnlisted") === "true";
+
+        const result = await this.config.registry.listDiscoveryRecords({
+          area,
+          creatorId,
+          query,
+          cursor,
+          limit,
+          includeUnlisted,
+        });
+        this.sendJson(res, 200, result);
+        return;
+      }
+
+      // GET /discovery/:id
+      if (method === "GET" && pathname.startsWith("/discovery/")) {
+        const discId = pathname.slice("/discovery/".length);
+        const record = await this.config.registry.getDiscoveryRecord(discId);
+        if (!record) {
+          this.sendError(res, 404, `Discovery record ${discId} not found`);
+          return;
+        }
+        this.sendJson(res, 200, record);
+        return;
+      }
+
+      // GET /creators (PRD v0.4.0 §7 & §18)
+      if (method === "GET" && pathname === "/creators") {
+        const query = url.searchParams.get("query") || undefined;
+        const creators = await this.config.registry.searchCreators(query);
+        this.sendJson(res, 200, { items: creators });
+        return;
+      }
+
       // GET /trails
       if (method === "GET" && pathname === "/trails") {
         const cursor = url.searchParams.get("cursor") || undefined;
