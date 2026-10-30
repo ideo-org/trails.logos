@@ -28,7 +28,16 @@ build:
 demo:
     pnpm demo
 
-# Launch the trails.logos REST API server
+# Free port 8095
+kill-dev:
+    bunx kill-port 8095
+
+# Kill existing server on port 8095 and start fresh
+restart-dev *ARGS:
+    bunx kill-port 8095
+    pnpm dev -- {{ARGS}}
+
+# Launch the trails.logos REST API server (port 8095)
 dev *ARGS:
     pnpm dev -- {{ARGS}}
 

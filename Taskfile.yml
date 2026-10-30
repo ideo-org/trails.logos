@@ -46,8 +46,21 @@ tasks:
     cmds:
       - pnpm demo
 
+  kill-dev:
+    desc: Free port 8095 using bunx kill-port
+    cmds:
+      - bunx kill-port 8095
+
+  restart-dev:
+    desc: Kill any process on port 8095 and restart the API server
+    cmds:
+      - task: kill-dev
+      - task: dev
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
+
   dev:
-    desc: Run the trails.logos REST API server in development mode
+    desc: Run the trails.logos REST API server in development mode (port 8095)
     cmds:
       - pnpm dev -- {{.CLI_ARGS}}
 
