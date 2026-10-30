@@ -52,16 +52,16 @@ tasks:
       - bunx kill-port 8095
 
   restart-dev:
-    desc: Kill any process on port 8095 and restart the API server
+    desc: Alias for task dev (cleans port 8095 and runs API server)
     cmds:
-      - task: kill-dev
       - task: dev
         vars:
           CLI_ARGS: '{{.CLI_ARGS}}'
 
   dev:
-    desc: Run the trails.logos REST API server in development mode (port 8095)
+    desc: Automatically clean up port 8095 and run the API server directly with tsx
     cmds:
+      - bunx kill-port 8095
       - pnpm dev -- {{.CLI_ARGS}}
 
   cli:

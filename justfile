@@ -32,14 +32,14 @@ demo:
 kill-dev:
     bunx kill-port 8095
 
-# Kill existing server on port 8095 and start fresh
-restart-dev *ARGS:
+# Clean up port 8095 and start server with tsx
+dev *ARGS:
     bunx kill-port 8095
     pnpm dev -- {{ARGS}}
 
-# Launch the trails.logos REST API server (port 8095)
-dev *ARGS:
-    pnpm dev -- {{ARGS}}
+# Alias for dev
+restart-dev *ARGS:
+    just dev {{ARGS}}
 
 # Run the trails-logos CLI
 cli *ARGS:
