@@ -59,6 +59,26 @@ async function main(): Promise<void> {
 
   console.log(`[trails.logos] REST API Server running at http://${running.host}:${running.port}`);
   console.log(`[trails.logos] Storage Adapter: ${storageMode}, Registry Adapter: ${registryMode}`);
+
+  // Prevent event loop from prematurely exiting or process being killed
+  const keepAlive = setInterval(() => {}, 1 << 30);
+
+  const shutdown = async () => {
+    clearInterval(keepAlive);
+    try {
+      await server.stop();
+    } catch {}
+    process.exit(0);
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+  process.on("uncaughtException", (err) => {
+    console.error("[trails.logos] Uncaught exception:", err);
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("[trails.logos] Unhandled rejection:", reason);
+  });
 }
 
 main().catch((err) => {
