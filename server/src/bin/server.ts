@@ -44,8 +44,8 @@ async function main(): Promise<void> {
 
   await registry.init();
 
-  // Automatic seeding of sample discovery catalogue disabled by default
-  if (process.env.SEED_SAMPLE_TRAILS === "true") {
+  // Automatic seeding of sample test discovery catalogue (use test- accounts for UI filtering)
+  if (process.env.SEED_SAMPLE_TRAILS !== "false") {
     const seedDir = await fs.mkdtemp(path.join(os.tmpdir(), "trails-seed-"));
     try {
       await seedCatalogueIfEmpty(registry, storage, seedDir);

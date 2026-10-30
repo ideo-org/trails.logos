@@ -111,20 +111,20 @@ export async function seedCatalogueIfEmpty(
   storage: IStorageAdapter,
   tempDir: string
 ): Promise<void> {
-  const catalog = await registry.listTrails();
-  if (catalog.items.length > 0) return;
+  const catalog = await registry.listTrails({ includeUnlisted: true });
+  if (catalog.items.some(t => t.trailId.startsWith("test-"))) return;
 
-  console.log("[trails.logos] Seeding initial PRD v0.4.0 catalogue...");
+  console.log("[trails.logos] Seeding sample PRD v0.4.0 catalogue with test- creators...");
 
-  // 1. Dhun Haveli Courtyard by @mira
+  // 1. Dhun Haveli Courtyard by @test-mira
   const t1Dir = path.join(tempDir, "seed-t1");
   const m1 = await createSamplePackage(t1Dir, {
-    trailId: "dhun-haveli-courtyard",
-    title: "An evening through the Haveli",
+    trailId: "test-dhun-haveli-courtyard",
+    title: "An evening through the Haveli (Sample)",
     introduction: "Worn sandstone lintels & passive evening drafts in historic Jaipur.",
-    creatorId: "creator-mira-1",
-    creatorUsername: "mira",
-    creatorDisplayName: "Mira Patel",
+    creatorId: "creator-test-mira",
+    creatorUsername: "test-mira",
+    creatorDisplayName: "Mira Patel (Test)",
     place: {
       name: "Dhun Haveli",
       locality: "Dhun, Jaipur",
@@ -145,15 +145,15 @@ export async function seedCatalogueIfEmpty(
     operationId: "seed-op-1",
   });
 
-  // 2. Mission Peak Ridge by @hiro
+  // 2. Mission Peak Ridge by @test-hiro
   const t2Dir = path.join(tempDir, "seed-t2");
   const m2 = await createSamplePackage(t2Dir, {
-    trailId: "mission-peak-ridge",
-    title: "Mission Peak Ridge Sunrise Trail",
+    trailId: "test-mission-peak-ridge",
+    title: "Mission Peak Ridge Sunrise Trail (Sample)",
     introduction: "Early morning ridgeline walk with views across Silicon Valley.",
-    creatorId: "creator-hiro-1",
-    creatorUsername: "hiro",
-    creatorDisplayName: "Hiro Nomad",
+    creatorId: "creator-test-hiro",
+    creatorUsername: "test-hiro",
+    creatorDisplayName: "Hiro Nomad (Test)",
     place: {
       name: "Mission Peak",
       locality: "Fremont, CA",
@@ -174,15 +174,15 @@ export async function seedCatalogueIfEmpty(
     operationId: "seed-op-2",
   });
 
-  // 3. Acoustic Study (unlocated anchor-less trail) by @soundcraft
+  // 3. Acoustic Study (unlocated anchor-less trail) by @test-soundcraft
   const t3Dir = path.join(tempDir, "seed-t3");
   const m3 = await createSamplePackage(t3Dir, {
-    trailId: "acoustic-resonance-study",
-    title: "Atmospheric Acoustic Resonance Study",
+    trailId: "test-acoustic-resonance-study",
+    title: "Atmospheric Acoustic Resonance Study (Sample)",
     introduction: "Spatial audio reverberation decay across cavernous unanchored chambers.",
-    creatorId: "creator-sound-1",
-    creatorUsername: "soundcraft",
-    creatorDisplayName: "SoundCraft",
+    creatorId: "creator-test-soundcraft",
+    creatorUsername: "test-soundcraft",
+    creatorDisplayName: "SoundCraft (Test)",
     place: undefined,
     geographicPath: undefined,
   });
@@ -196,5 +196,5 @@ export async function seedCatalogueIfEmpty(
     operationId: "seed-op-3",
   });
 
-  console.log("[trails.logos] Seeded 3 sample trails across 3 creators successfully!");
+  console.log("[trails.logos] Seeded 3 test sample trails across @test-* creators successfully!");
 }
