@@ -116,22 +116,22 @@ export async function seedCatalogueIfEmpty(
 
   console.log("[trails.logos] Seeding sample PRD v0.4.0 catalogue with test- creators...");
 
-  // 1. Dhun Haveli Courtyard by @test-mira
+  // 1. Presidio Coastal Overlook by @test-mira
   const t1Dir = path.join(tempDir, "seed-t1");
   const m1 = await createSamplePackage(t1Dir, {
-    trailId: "test-dhun-haveli-courtyard",
-    title: "An evening through the Haveli (Sample)",
-    introduction: "Worn sandstone lintels & passive evening drafts in historic Jaipur.",
+    trailId: "test-presidio-coastal-trail",
+    title: "Presidio Coastal Overlook (Sample)",
+    introduction: "Pacific ocean bluffs and eucalyptus groves above the Golden Gate.",
     creatorId: "creator-test-mira",
     creatorUsername: "test-mira",
     creatorDisplayName: "Mira Patel (Test)",
     place: {
-      name: "Dhun Haveli",
-      locality: "Dhun, Jaipur",
+      name: "Presidio Bluffs",
+      locality: "San Francisco, CA",
       geographicAnchor: {
-        latitude: 26.9124,
-        longitude: 75.7873,
-        altitude: 430.0,
+        latitude: 37.7983,
+        longitude: -122.4662,
+        altitude: 90.0,
       },
     },
   });
