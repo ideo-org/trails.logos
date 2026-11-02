@@ -11,6 +11,7 @@ import {
   TrailRevisionSchema,
   PublicationReceiptSchema,
   DiscoveryRecordSchema,
+  CreatorRecordSchema,
 } from "@trails-logos/core";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -58,6 +59,22 @@ export interface ListDiscoveryResult {
   nextCursor?: string;
 }
 
+export interface CheckUsernameResult {
+  available: boolean;
+  username: string;
+  reason?: string;
+  claimedBy?: string;
+}
+
+export interface ClaimCreatorParams {
+  username: string;
+  displayName?: string;
+  accountAddress: string;
+  bio?: string;
+  avatarUrl?: string;
+  ensDomain?: string;
+}
+
 export interface IRegistryAdapter {
   init(): Promise<void>;
   registerTrail(params: RegisterTrailParams): Promise<{ publication: TrailPublication; receipt: PublicationReceipt }>;
@@ -70,6 +87,10 @@ export interface IRegistryAdapter {
   listTrails(options?: ListTrailsOptions): Promise<ListTrailsResult>;
   listDiscoveryRecords(options?: ListDiscoveryOptions): Promise<ListDiscoveryResult>;
   searchCreators(query?: string): Promise<CreatorRecord[]>;
+  checkUsername(username: string): Promise<CheckUsernameResult>;
+  claimCreator(params: ClaimCreatorParams): Promise<CreatorRecord>;
+  getCreatorByUsername(username: string): Promise<CreatorRecord | null>;
+  getCreatorByAddress(address: string): Promise<CreatorRecord | null>;
 }
 
 function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -88,6 +109,7 @@ export class MockRegistryAdapter implements IRegistryAdapter {
   private publications: Map<string, TrailPublication> = new Map();
   private revisions: Map<string, Map<number, TrailRevision>> = new Map();
   private discoveryRecords: Map<string, DiscoveryRecord> = new Map();
+  private creators: Map<string, CreatorRecord> = new Map();
   private storageFile?: string;
   private networkId = "logos-localnet";
   private programId = "lez-trails-registry-v0.1.0";
@@ -104,6 +126,7 @@ export class MockRegistryAdapter implements IRegistryAdapter {
           publications: [string, TrailPublication][];
           revisions: [string, [number, TrailRevision][]][];
           discoveryRecords?: [string, DiscoveryRecord][];
+          creators?: [string, CreatorRecord][];
         };
         this.publications = new Map(parsed.publications);
         this.revisions = new Map(
@@ -131,6 +154,9 @@ export class MockRegistryAdapter implements IRegistryAdapter {
             });
           }
         }
+        if (parsed.creators) {
+          this.creators = new Map(parsed.creators);
+        }
       } catch (err: unknown) {
         if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
           throw err;
@@ -149,8 +175,126 @@ export class MockRegistryAdapter implements IRegistryAdapter {
         Array.from(revMap.entries()),
       ]),
       discoveryRecords: Array.from(this.discoveryRecords.entries()),
+      creators: Array.from(this.creators.entries()),
     };
     await fs.writeFile(this.storageFile, JSON.stringify(serializable, null, 2), "utf-8");
+  }
+
+  async checkUsername(rawUsername: string): Promise<CheckUsernameResult> {
+    const username = rawUsername.toLowerCase().trim().replace(/^@/, "");
+    if (!username || username.length < 3) {
+      return { available: false, username, reason: "Username must be at least 3 characters long" };
+    }
+    if (username.length > 64) {
+      return { available: false, username, reason: "Username must not exceed 64 characters" };
+    }
+    if (!/^[a-z0-9][a-z0-9_.-]*[a-z0-9]$/.test(username)) {
+      return { available: false, username, reason: "Username can only contain lowercase letters, numbers, hyphens, underscores, or periods" };
+    }
+
+    const existing = this.creators.get(username);
+    if (existing) {
+      return {
+        available: false,
+        username,
+        reason: `Username @${username} is already claimed`,
+        claimedBy: existing.publisherReference,
+      };
+    }
+
+    for (const record of this.discoveryRecords.values()) {
+      if (record.username.toLowerCase() === username) {
+        return {
+          available: false,
+          username,
+          reason: `Username @${username} is already registered in discovery`,
+          claimedBy: record.publisherReference,
+        };
+      }
+    }
+
+    return { available: true, username };
+  }
+
+  async claimCreator(params: ClaimCreatorParams): Promise<CreatorRecord> {
+    const rawUsername = params.username.toLowerCase().trim().replace(/^@/, "");
+    const existing = this.creators.get(rawUsername);
+
+    if (existing) {
+      if (existing.publisherReference.toLowerCase() === params.accountAddress.toLowerCase()) {
+        if (params.displayName) existing.displayName = params.displayName;
+        if (params.bio !== undefined) existing.bio = params.bio;
+        if (params.avatarUrl !== undefined) existing.avatarUrl = params.avatarUrl;
+        if (params.ensDomain) existing.ensDomain = params.ensDomain;
+        await this.persist();
+        return existing;
+      }
+      throw new Error(`Username @${rawUsername} is already claimed by account ${existing.publisherReference}`);
+    }
+
+    const check = await this.checkUsername(rawUsername);
+    if (!check.available) {
+      throw new Error(check.reason || `Invalid username @${rawUsername}`);
+    }
+
+    const creatorId = `creator-${params.accountAddress.slice(2, 10).toLowerCase()}`;
+    const ensDomain = params.ensDomain || (rawUsername.includes(".") ? rawUsername : `${rawUsername}.trails.eth`);
+
+    const record: CreatorRecord = {
+      creatorId,
+      username: rawUsername,
+      displayName: params.displayName || rawUsername,
+      publisherReference: params.accountAddress,
+      trailCount: 0,
+      bio: params.bio,
+      avatarUrl: params.avatarUrl,
+      ensDomain,
+    };
+    CreatorRecordSchema.parse(record);
+    this.creators.set(rawUsername, record);
+    await this.persist();
+    return record;
+  }
+
+  async getCreatorByUsername(username: string): Promise<CreatorRecord | null> {
+    const norm = username.toLowerCase().trim().replace(/^@/, "");
+    const found = this.creators.get(norm);
+    if (found) return { ...found };
+    for (const d of this.discoveryRecords.values()) {
+      if (d.username.toLowerCase() === norm) {
+        return {
+          creatorId: d.creatorId,
+          username: d.username,
+          displayName: d.displayName,
+          publisherReference: d.publisherReference,
+          trailCount: 1,
+          ensDomain: `${d.username}.trails.eth`,
+        };
+      }
+    }
+    return null;
+  }
+
+  async getCreatorByAddress(address: string): Promise<CreatorRecord | null> {
+    const addr = address.toLowerCase();
+    for (const c of this.creators.values()) {
+      if (c.publisherReference.toLowerCase() === addr) {
+        return { ...c };
+      }
+    }
+    for (const d of this.discoveryRecords.values()) {
+      if (d.publisherReference.toLowerCase() === addr) {
+        return {
+          creatorId: d.creatorId,
+          username: d.username,
+          displayName: d.displayName,
+          publisherReference: d.publisherReference,
+          trailCount: 1,
+          ensDomain: `${d.username}.trails.eth`,
+        };
+      }
+    }
+    return null;
   }
 
   async registerTrail(params: RegisterTrailParams): Promise<{ publication: TrailPublication; receipt: PublicationReceipt }> {
@@ -213,9 +357,35 @@ export class MockRegistryAdapter implements IRegistryAdapter {
       }
     }
 
-    const creatorId = manifest.creatorId ?? (manifest.creatorDisplayName ? `creator-${manifest.creatorDisplayName.toLowerCase().replace(/[^a-z0-9]/g, "")}` : `creator-${publisherAccount.slice(2, 10)}`);
-    const username = manifest.creatorUsername ?? (manifest.creatorDisplayName ? manifest.creatorDisplayName.toLowerCase().replace(/\s+/g, "") : `user_${publisherAccount.slice(2, 8)}`);
-    const displayName = manifest.creatorDisplayName ?? "Trail Contributor";
+    const rawUsername = manifest.creatorUsername ?? (manifest.creatorDisplayName ? manifest.creatorDisplayName.toLowerCase().replace(/\s+/g, "") : `user_${publisherAccount.slice(2, 8)}`);
+    const normalizedUsername = rawUsername.toLowerCase().trim().replace(/^@/, "");
+
+    // Enforce non-duplicate username
+    const claimedCreator = this.creators.get(normalizedUsername);
+    if (claimedCreator && claimedCreator.publisherReference.toLowerCase() !== publisherAccount.toLowerCase()) {
+      throw new Error(`Username @${normalizedUsername} is already claimed by account ${claimedCreator.publisherReference}`);
+    }
+
+    for (const disc of this.discoveryRecords.values()) {
+      if (disc.username.toLowerCase() === normalizedUsername && disc.publisherReference.toLowerCase() !== publisherAccount.toLowerCase()) {
+        throw new Error(`Username @${normalizedUsername} is already registered to account ${disc.publisherReference}`);
+      }
+    }
+
+    const creatorId = manifest.creatorId ?? (claimedCreator ? claimedCreator.creatorId : `creator-${publisherAccount.slice(2, 10).toLowerCase()}`);
+    const displayName = manifest.creatorDisplayName ?? (claimedCreator ? claimedCreator.displayName : "Trail Contributor");
+
+    if (!claimedCreator) {
+      this.creators.set(normalizedUsername, {
+        creatorId,
+        username: normalizedUsername,
+        displayName,
+        publisherReference: publisherAccount,
+        trailCount: 1,
+        ensDomain: normalizedUsername.includes(".") ? normalizedUsername : `${normalizedUsername}.trails.eth`,
+      });
+    }
+
     const placeLabel = manifest.place?.name ?? manifest.place?.locality;
     const coverReference = manifest.coverAssetId ?? manifest.assets.find(a => a.kind === "photo")?.relativePath;
 
@@ -225,7 +395,7 @@ export class MockRegistryAdapter implements IRegistryAdapter {
       title: manifest.title,
       shortDescription: manifest.introduction,
       creatorId,
-      username,
+      username: normalizedUsername,
       displayName,
       publisherReference: publisherAccount,
       recordedAt: manifest.recordedAt,
@@ -550,20 +720,28 @@ export class MockRegistryAdapter implements IRegistryAdapter {
   }
 
   async searchCreators(query?: string): Promise<CreatorRecord[]> {
-    const counts = new Map<string, { creatorId: string; username: string; displayName: string; publisherReference: string; trailCount: number }>();
+    const counts = new Map<string, CreatorRecord>();
 
+    // Seed from claimed creators
+    for (const c of this.creators.values()) {
+      counts.set(c.username.toLowerCase(), { ...c, trailCount: 0 });
+    }
+
+    // Aggregate from discovery records
     for (const r of this.discoveryRecords.values()) {
       if (!r.listed) continue;
-      const existing = counts.get(r.creatorId);
+      const key = r.username.toLowerCase();
+      const existing = counts.get(key);
       if (existing) {
         existing.trailCount += 1;
       } else {
-        counts.set(r.creatorId, {
+        counts.set(key, {
           creatorId: r.creatorId,
           username: r.username,
           displayName: r.displayName,
           publisherReference: r.publisherReference,
           trailCount: 1,
+          ensDomain: r.username.includes(".") ? r.username : `${r.username}.trails.eth`,
         });
       }
     }
@@ -571,7 +749,11 @@ export class MockRegistryAdapter implements IRegistryAdapter {
     let creators = Array.from(counts.values());
     if (query && query.trim().length > 0) {
       const q = query.toLowerCase().trim();
-      creators = creators.filter(c => c.username.toLowerCase().includes(q) || c.displayName.toLowerCase().includes(q));
+      creators = creators.filter(c =>
+        c.username.toLowerCase().includes(q) ||
+        c.displayName.toLowerCase().includes(q) ||
+        (c.ensDomain && c.ensDomain.toLowerCase().includes(q))
+      );
     }
 
     creators.sort((a, b) => b.trailCount - a.trailCount);
@@ -641,5 +823,21 @@ export class LezRegistryAdapter implements IRegistryAdapter {
 
   async searchCreators(query?: string): Promise<CreatorRecord[]> {
     return this.fallback.searchCreators(query);
+  }
+
+  async checkUsername(username: string): Promise<CheckUsernameResult> {
+    return this.fallback.checkUsername(username);
+  }
+
+  async claimCreator(params: ClaimCreatorParams): Promise<CreatorRecord> {
+    return this.fallback.claimCreator(params);
+  }
+
+  async getCreatorByUsername(username: string): Promise<CreatorRecord | null> {
+    return this.fallback.getCreatorByUsername(username);
+  }
+
+  async getCreatorByAddress(address: string): Promise<CreatorRecord | null> {
+    return this.fallback.getCreatorByAddress(address);
   }
 }

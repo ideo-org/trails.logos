@@ -131,4 +131,51 @@ describe("Server REST API Suite (PRD Section 13)", () => {
     const nonExistentCreatorBody = await nonExistentCreatorRes.json();
     expect(nonExistentCreatorBody.items.length).toBe(0);
   });
+
+  it("handles username availability checks and creator claiming via REST API", async () => {
+    // 1. Check availability
+    const checkRes = await fetch(`${baseUrl}/creators/check-username?username=wandering-cedar-42`);
+    expect(checkRes.status).toBe(200);
+    const checkBody = await checkRes.json();
+    expect(checkBody.available).toBe(true);
+
+    // 2. Claim username for account A
+    const claimRes = await fetch(`${baseUrl}/creators/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "wandering-cedar-42",
+        displayName: "Cedar Walker",
+        accountAddress: "0x1234567890123456789012345678901234567890",
+        bio: "Spatial pioneer",
+      }),
+    });
+    expect(claimRes.status).toBe(201);
+    const claimBody = await claimRes.json();
+    expect(claimBody.username).toBe("wandering-cedar-42");
+    expect(claimBody.ensDomain).toBe("wandering-cedar-42.trails.eth");
+
+    // 3. Check again -> now unavailable
+    const checkRes2 = await fetch(`${baseUrl}/creators/check-username?username=wandering-cedar-42`);
+    const checkBody2 = await checkRes2.json();
+    expect(checkBody2.available).toBe(false);
+
+    // 4. Duplicate claim by another account -> 409 Conflict
+    const dupRes = await fetch(`${baseUrl}/creators/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "wandering-cedar-42",
+        displayName: "Impostor",
+        accountAddress: "0x9999999999999999999999999999999999999999",
+      }),
+    });
+    expect(dupRes.status).toBe(409);
+
+    // 5. Query /creators/:username
+    const getRes = await fetch(`${baseUrl}/creators/wandering-cedar-42`);
+    expect(getRes.status).toBe(200);
+    const getBody = await getRes.json();
+    expect(getBody.username).toBe("wandering-cedar-42");
+  });
 });

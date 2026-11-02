@@ -60,8 +60,8 @@ async function main(): Promise<void> {
   console.log(`[trails.logos] REST API Server running at http://${running.host}:${running.port}`);
   console.log(`[trails.logos] Storage Adapter: ${storageMode}, Registry Adapter: ${registryMode}`);
 
-  // Prevent event loop from prematurely exiting or process being killed
-  const keepAlive = setInterval(() => {}, 1 << 30);
+  // Prevent event loop from prematurely exiting
+  const keepAlive = setInterval(() => {}, 60000);
 
   const shutdown = async () => {
     clearInterval(keepAlive);

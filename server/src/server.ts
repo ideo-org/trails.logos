@@ -15,6 +15,7 @@ import {
   type PublicationReceipt,
   validateTrailPackage,
   unpackTrailPackage,
+  ClaimCreatorRequestSchema,
 } from "@trails-logos/core";
 
 export interface ServerConfig {
@@ -162,11 +163,66 @@ export class TrailsServer {
         return;
       }
 
+      // GET /creators/check-username
+      if (method === "GET" && pathname === "/creators/check-username") {
+        const username = url.searchParams.get("username") || "";
+        const result = await this.config.registry.checkUsername(username);
+        this.sendJson(res, 200, result);
+        return;
+      }
+
+      // POST /creators/claim or POST /creators/register
+      if (method === "POST" && (pathname === "/creators/claim" || pathname === "/creators/register")) {
+        const bodyBuf = await this.collectBody(req);
+        if (bodyBuf.length === 0) {
+          this.sendError(res, 400, "Empty JSON payload");
+          return;
+        }
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(bodyBuf.toString("utf-8"));
+        } catch {
+          this.sendError(res, 400, "Invalid JSON body");
+          return;
+        }
+
+        const validation = ClaimCreatorRequestSchema.safeParse(parsed);
+        if (!validation.success) {
+          this.sendError(res, 400, `Validation failed: ${validation.error.message}`);
+          return;
+        }
+
+        try {
+          const creator = await this.config.registry.claimCreator(validation.data);
+          this.sendJson(res, 201, creator);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes("already claimed") || msg.includes("already registered")) {
+            this.sendError(res, 409, msg);
+          } else {
+            this.sendError(res, 400, msg);
+          }
+        }
+        return;
+      }
+
       // GET /creators (PRD v0.4.0 §7 & §18)
       if (method === "GET" && pathname === "/creators") {
         const query = url.searchParams.get("query") || undefined;
         const creators = await this.config.registry.searchCreators(query);
         this.sendJson(res, 200, { items: creators });
+        return;
+      }
+
+      // GET /creators/:username
+      if (method === "GET" && pathname.startsWith("/creators/")) {
+        const creatorUsername = pathname.slice("/creators/".length);
+        const creator = await this.config.registry.getCreatorByUsername(creatorUsername);
+        if (!creator) {
+          this.sendError(res, 404, `Creator @${creatorUsername} not found`);
+          return;
+        }
+        this.sendJson(res, 200, creator);
         return;
       }
 
@@ -310,16 +366,27 @@ export class TrailsServer {
       const storageResult = await this.config.storage.uploadPackage(packageBuffer);
 
       // Register on LEZ
-      const { receipt } = await this.config.registry.registerTrail({
-        manifest,
-        packageCid: storageResult.cid,
-        packageSizeBytes: storageResult.byteLength,
-        publisherAccount: publisher,
-        operationId,
-      });
+      let registrationReceipt: PublicationReceipt;
+      try {
+        const { receipt } = await this.config.registry.registerTrail({
+          manifest,
+          packageCid: storageResult.cid,
+          packageSizeBytes: storageResult.byteLength,
+          publisherAccount: publisher,
+          operationId,
+        });
+        registrationReceipt = receipt;
+      } catch (regErr: unknown) {
+        const regMsg = regErr instanceof Error ? regErr.message : String(regErr);
+        if (regMsg.includes("already claimed") || regMsg.includes("already registered")) {
+          this.sendError(res, 409, regMsg);
+          return;
+        }
+        throw regErr;
+      }
 
-      this.operationReceipts.set(operationId, receipt);
-      this.sendJson(res, 201, receipt);
+      this.operationReceipts.set(operationId, registrationReceipt);
+      this.sendJson(res, 201, registrationReceipt);
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }

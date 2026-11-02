@@ -213,9 +213,32 @@ export const CreatorRecordSchema = z.object({
   displayName: z.string().min(1),
   publisherReference: z.string().min(1),
   trailCount: z.number().int().nonnegative(),
+  bio: z.string().optional(),
+  avatarUrl: z.string().optional(),
+  ensDomain: z.string().optional(),
 }).strict();
 
 export type CreatorRecord = z.infer<typeof CreatorRecordSchema>;
+
+export const CheckUsernameResponseSchema = z.object({
+  available: z.boolean(),
+  username: z.string(),
+  reason: z.string().optional(),
+  claimedBy: z.string().optional(),
+}).strict();
+
+export type CheckUsernameResponse = z.infer<typeof CheckUsernameResponseSchema>;
+
+export const ClaimCreatorRequestSchema = z.object({
+  username: z.string().min(3).max(64),
+  displayName: z.string().min(1).max(128).optional(),
+  accountAddress: z.string().min(1),
+  bio: z.string().max(500).optional(),
+  avatarUrl: z.string().optional(),
+  ensDomain: z.string().optional(),
+}).strict();
+
+export type ClaimCreatorRequest = z.infer<typeof ClaimCreatorRequestSchema>;
 
 // 9. Trail Publication (LEZ State Record)
 export const TrailPublicationSchema = z.object({

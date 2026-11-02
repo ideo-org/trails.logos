@@ -125,4 +125,67 @@ describe("Registry Adapter Suite (PRD Section 11)", () => {
     const relisted = await adapter.setListed(manifest.trailId, true, publisher);
     expect(relisted.listed).toBe(true);
   });
+
+  it("claims unique username handles and prevents duplicate collisions across accounts", async () => {
+    const adapter = new MockRegistryAdapter(stateFile);
+    await adapter.init();
+
+    // 1. Check availability
+    const check1 = await adapter.checkUsername("wandering-cedar-42");
+    expect(check1.available).toBe(true);
+    expect(check1.username).toBe("wandering-cedar-42");
+
+    // Invalid username checks
+    const tooShort = await adapter.checkUsername("ab");
+    expect(tooShort.available).toBe(false);
+
+    // 2. Claim username for account A
+    const accountA = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const creatorA = await adapter.claimCreator({
+      username: "wandering-cedar-42",
+      displayName: "Cedar Walker",
+      accountAddress: accountA,
+      bio: "Spatial archivist exploring alpine meadows.",
+    });
+
+    expect(creatorA.username).toBe("wandering-cedar-42");
+    expect(creatorA.publisherReference).toBe(accountA);
+    expect(creatorA.ensDomain).toBe("wandering-cedar-42.trails.eth");
+
+    // 3. Check availability again - now taken
+    const checkTaken = await adapter.checkUsername("wandering-cedar-42");
+    expect(checkTaken.available).toBe(false);
+    expect(checkTaken.claimedBy).toBe(accountA);
+
+    // 4. Duplicate claim by Account B must fail
+    const accountB = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    await expect(
+      adapter.claimCreator({
+        username: "wandering-cedar-42",
+        displayName: "Impostor",
+        accountAddress: accountB,
+      })
+    ).rejects.toThrow(/already claimed/);
+
+    // 5. Idempotent update by Account A succeeds
+    const updatedA = await adapter.claimCreator({
+      username: "wandering-cedar-42",
+      displayName: "Cedar Walker Updated",
+      accountAddress: accountA,
+    });
+    expect(updatedA.displayName).toBe("Cedar Walker Updated");
+
+    // 6. Publication with Account B using claimed username fails
+    const manifest = await createSampleTrailPackage(tempDir);
+    manifest.creatorUsername = "wandering-cedar-42";
+    await expect(
+      adapter.registerTrail({
+        manifest,
+        packageCid: "cid_sha256_b_collision",
+        packageSizeBytes: 2048,
+        publisherAccount: accountB,
+        operationId: "op-collision-01",
+      })
+    ).rejects.toThrow(/already claimed/);
+  });
 });
