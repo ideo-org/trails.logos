@@ -51,10 +51,23 @@ pub struct TrailRevision {
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CreatorAccount {
+    pub username: String,
+    pub owner_account: [u8; 32],
+    pub ens_domain: Option<String>,
+    pub registered_at_block: u64,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
 pub enum RegistryInstruction {
     Initialise {
         administrator_account: [u8; 32],
         authorised_publisher_account: [u8; 32],
+    },
+    ClaimUsername {
+        operation_id: String,
+        username: String,
+        ens_domain: Option<String>,
     },
     RegisterTrail {
         operation_id: String,
@@ -92,12 +105,15 @@ pub enum RegistryError {
     TrailNotFound,
     RevisionMismatch,
     OperationConflict,
+    UsernameAlreadyClaimed,
+    InvalidUsername,
 }
 
 pub struct TrailsRegistryState {
     pub config: Option<RegistryConfig>,
     pub publications: Vec<TrailPublication>,
     pub revisions: Vec<TrailRevision>,
+    pub creators: Vec<CreatorAccount>,
     pub processed_operations: Vec<(String, String)>, // (operation_id, trail_id)
 }
 
@@ -107,6 +123,7 @@ impl TrailsRegistryState {
             config: None,
             publications: Vec::new(),
             revisions: Vec::new(),
+            creators: Vec::new(),
             processed_operations: Vec::new(),
         }
     }
@@ -130,6 +147,35 @@ impl TrailsRegistryState {
                     administrator_account,
                     authorised_publisher_account,
                 });
+                Ok(())
+            }
+            RegistryInstruction::ClaimUsername {
+                operation_id,
+                username,
+                ens_domain,
+            } => {
+                let norm = username.trim().to_lowercase();
+                if norm.len() < 3 || norm.len() > 64 {
+                    return Err(RegistryError::InvalidUsername);
+                }
+
+                if let Some(existing) = self.creators.iter_mut().find(|c| c.username == norm) {
+                    if existing.owner_account == caller {
+                        if let Some(domain) = ens_domain {
+                            existing.ens_domain = Some(domain);
+                        }
+                        return Ok(());
+                    }
+                    return Err(RegistryError::UsernameAlreadyClaimed);
+                }
+
+                self.creators.push(CreatorAccount {
+                    username: norm.clone(),
+                    owner_account: caller,
+                    ens_domain,
+                    registered_at_block: block_height,
+                });
+                self.processed_operations.push((operation_id, norm));
                 Ok(())
             }
             RegistryInstruction::RegisterTrail {
@@ -298,6 +344,11 @@ impl TrailsRegistryState {
             .take(limit)
             .collect()
     }
+
+    pub fn get_creator(&self, username: &str) -> Option<&CreatorAccount> {
+        let norm = username.trim().to_lowercase();
+        self.creators.iter().find(|c| c.username == norm)
+    }
 }
 
 #[cfg(test)]
@@ -431,5 +482,60 @@ mod tests {
             .unwrap();
 
         assert_eq!(registry.list_trails(0, 10).len(), 1);
+    }
+
+    #[test]
+    fn test_claim_username_and_prevent_duplicates() {
+        let mut registry = TrailsRegistryState::new();
+        let user_a: [u8; 32] = [1u8; 32];
+        let user_b: [u8; 32] = [2u8; 32];
+
+        // 1. User A claims wandering-cedar-42
+        registry
+            .process_instruction(
+                RegistryInstruction::ClaimUsername {
+                    operation_id: "claim_001".to_string(),
+                    username: "wandering-cedar-42".to_string(),
+                    ens_domain: Some("wandering-cedar-42.trails.eth".to_string()),
+                },
+                user_a,
+                100,
+            )
+            .unwrap();
+
+        let creator = registry.get_creator("wandering-cedar-42").unwrap();
+        assert_eq!(creator.owner_account, user_a);
+        assert_eq!(creator.ens_domain.as_deref(), Some("wandering-cedar-42.trails.eth"));
+
+        // 2. User B tries to claim the same username -> UsernameAlreadyClaimed
+        let err = registry
+            .process_instruction(
+                RegistryInstruction::ClaimUsername {
+                    operation_id: "claim_002".to_string(),
+                    username: "wandering-cedar-42".to_string(),
+                    ens_domain: Some("impostor.eth".to_string()),
+                },
+                user_b,
+                101,
+            )
+            .unwrap_err();
+
+        assert_eq!(err, RegistryError::UsernameAlreadyClaimed);
+
+        // 3. User A updates their domain -> succeeds
+        registry
+            .process_instruction(
+                RegistryInstruction::ClaimUsername {
+                    operation_id: "claim_003".to_string(),
+                    username: "wandering-cedar-42".to_string(),
+                    ens_domain: Some("cedar.logos".to_string()),
+                },
+                user_a,
+                102,
+            )
+            .unwrap();
+
+        let updated = registry.get_creator("wandering-cedar-42").unwrap();
+        assert_eq!(updated.ens_domain.as_deref(), Some("cedar.logos"));
     }
 }
